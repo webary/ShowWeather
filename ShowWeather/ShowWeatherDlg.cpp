@@ -18,8 +18,9 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
-#include <map>
-#include <string>
+
+#include "rapidjson/document.h"
+
 using namespace std;
 #pragma comment(lib,"WinInet.lib")
 
@@ -65,7 +66,7 @@ END_MESSAGE_MAP()
 
 CShowWeatherDlg::CShowWeatherDlg(CWnd* pParent /*=NULL*/)
     : CDialogEx(IDD_SHOWWEATHER_DIALOG, pParent)
-    , m_show(_T(""))
+    , m_show("日期\t\t平均温度℃　　最低气温\t最高气温")
 {
     m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -74,7 +75,8 @@ void CShowWeatherDlg::DoDataExchange(CDataExchange* pDX)
 {
     CDialogEx::DoDataExchange(pDX);
     DDX_Text(pDX, IDC_EDIT1, m_show);
-    DDX_Control(pDX, IDC_COMBO1, m_cmb);
+    DDX_Control(pDX, IDC_COMBO_CITY, m_cmb_city);
+    DDX_Control(pDX, IDC_COMBO_PROVICE, m_cmb_provice);
 }
 
 BEGIN_MESSAGE_MAP(CShowWeatherDlg, CDialogEx)
@@ -83,6 +85,7 @@ BEGIN_MESSAGE_MAP(CShowWeatherDlg, CDialogEx)
     ON_WM_QUERYDRAGICON()
     ON_BN_CLICKED(IDOK, &CShowWeatherDlg::OnBnClickedOk)
     ON_WM_TIMER()
+    ON_CBN_SELCHANGE(IDC_COMBO_PROVICE, &CShowWeatherDlg::OnCbnSelChangeComboProvice)
 END_MESSAGE_MAP()
 
 
@@ -116,9 +119,10 @@ BOOL CShowWeatherDlg::OnInitDialog()
     SetIcon(m_hIcon, FALSE);		// 设置小图标
 
     // TODO: 在此添加额外的初始化代码
-    m_cmb.AddString("上海市");
-    m_cmb.SetCurSel(0);
-    SetTimer(0, 1, NULL);
+    //m_cmb_city.AddString("上海市");
+    //m_cmb_city.SetCurSel(0);
+    //SetTimer(0, 1, NULL);
+    SetTimer(1, 1, NULL);
     return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -132,10 +136,6 @@ void CShowWeatherDlg::OnSysCommand(UINT nID, LPARAM lParam)
         CDialogEx::OnSysCommand(nID, lParam);
     }
 }
-
-// 如果向对话框添加最小化按钮，则需要下面的代码
-//  来绘制该图标。  对于使用文档/视图模型的 MFC 应用程序，
-//  这将由框架自动完成。
 
 void CShowWeatherDlg::OnPaint()
 {
@@ -160,41 +160,75 @@ void CShowWeatherDlg::OnPaint()
     }
 }
 
-//当用户拖动最小化窗口时系统调用此函数取得光标
-//显示。
+//当用户拖动最小化窗口时系统调用此函数取得光标显示。
 HCURSOR CShowWeatherDlg::OnQueryDragIcon()
 {
     return static_cast<HCURSOR>(m_hIcon);
 }
 
-
 void CShowWeatherDlg::OnBnClickedOk()
 {
-    m_show = "正在查询，请稍后...";
+    CString provice, city;
+    m_cmb_provice.GetLBText(m_cmb_provice.GetCurSel(), provice);
+    m_cmb_city.GetLBText(m_cmb_city.GetCurSel(), city);
+    SetDlgItemText(IDC_STATIC_TIPS, "正在查询该城市的天气情况...");
     UpdateData(FALSE);
-    prase();
+    int city_id = getCityId(provice.GetBuffer(), city.GetBuffer());
+    if (city_id == 0) {
+        ofstream ferr("err.log", std::ios::app);
+        ferr << CTime::GetCurrentTime().Format("%Y-%m-%d %H:%M:%S\t").GetBuffer()
+            << "provice: " << provice.GetBuffer() << "\tcity: " << city.GetBuffer()
+            << endl;
+        ferr.close();
+        MessageBox("访问服务器出错，请稍后重试！");
+    }
+    else {
+        prase(city_id);
+    }
+    SetDlgItemText(IDC_STATIC_TIPS, "该城市最近14天内的天气情况如下：");
 }
-
 
 void CShowWeatherDlg::OnTimer(UINT_PTR nIDEvent)
 {
-    // TODO: 在此添加消息处理程序代码和/或调用默认值
     switch (nIDEvent) {
-        case 0:
-            KillTimer(0);
-            prase();
+        case 1:
+            KillTimer(1);
+            loadCityIdFromFile("city_cn_id.txt");
+            for (auto& pro : city_cn_id_Map)
+                m_cmb_provice.AddString(pro.first.c_str());
+            m_cmb_provice.SetCurSel(11);
+            CString provice;
+            m_cmb_provice.GetLBText(m_cmb_provice.GetCurSel(), provice);
+            auto it = city_cn_id_Map.find(provice.GetBuffer());
+            for (auto& city : it->second)
+                m_cmb_city.AddString(city.first.c_str());
+            m_cmb_city.SetCurSel(6);
+            OnBnClickedOk();
             break;
     }
     CDialogEx::OnTimer(nIDEvent);
 }
 
-void CShowWeatherDlg::prase()
+inline void CShowWeatherDlg::joinURL(int city_id)
 {
+    /*
+    @id是要查询的城市的id，可在http://bulk.openweathermap.org/sample/中获取
+    @cnt传递我们需要获取最近多少天的天气情况
+    @mode：服务器回传的数据格式
+    @units：温度的单位
+    @APPID：个人注册后生成的id，用于用户授权和权限控制
+    */
+    m_url.Format("http://api.openweathermap.org/data/2.5/forecast/daily?id=%d&cnt=%d&mode=xml&units=Metric&APPID=aba637fa40511e6c11f801b29414a4ab", city_id, 14);
+}
+
+void CShowWeatherDlg::prase(int city_id)
+{
+    joinURL(city_id);
     CInternetSession session;
     CString strServer, strObject;
     INTERNET_PORT wPort;
     DWORD dwType;
-    if (!AfxParseURL(_T("http://api.openweathermap.org/data/2.5/forecast?id=1796236&mode=xml&APPID=aba637fa40511e6c11f801b29414a4ab"), dwType, strServer, strObject, wPort))
+    if (!AfxParseURL(m_url, dwType, strServer, strObject, wPort))
         return;//URL解析错误
     CHttpConnection* pHttpConnection = session.GetHttpConnection(strServer, wPort);
     CHttpFile *pHttpFile = pHttpConnection->OpenRequest(CHttpConnection::HTTP_VERB_GET, strObject);
@@ -204,54 +238,74 @@ void CShowWeatherDlg::prase()
     CString str = "";
     if (dwRet == HTTP_STATUS_OK) {
         CString tmp;
-        while (pHttpFile->ReadString(tmp) > 0) {
+        while (pHttpFile->ReadString(tmp) > 0)
             str += tmp;
-        }
     }
 
-    map<string, double> date_tp;
-    map<string, double> date_tp_max;
-    map<string, double> date_tp_min;
+    map<string, int> date_tp;
+    map<string, int> date_tp_max;
+    map<string, int> date_tp_min;
     tinyxml2::XMLDocument doc;
     doc.Parse(str.GetBuffer());
     tinyxml2::XMLElement* node_forcast = doc.FirstChildElement()->FirstChildElement("forecast");
     tinyxml2::XMLElement* node_time = node_forcast->FirstChildElement();
-    string lastDate;
-    int cnt = 0;
     while (1) {
-        string date = node_time->Attribute("from");
-        date = date.substr(0, 10);
-        if (date_tp.empty())
-            lastDate = date;
+        string date = node_time->Attribute("day");
         tinyxml2::XMLElement* tpElem = node_time->FirstChildElement("temperature");
         double tp;
-        tpElem->QueryAttribute("value", &tp);
-        if (date_tp.find(date) != date_tp.end()) { //找到
-            date_tp[date] += tp;
-            ++cnt;
-            if (tp > date_tp_max[date])
-                date_tp_max[date] = tp;
-            else if (tp < date_tp_min[date])
-                date_tp_min[date] = tp;
-        }
-        else {
-            if (lastDate != date)
-                date_tp[lastDate] = (int)(date_tp[lastDate] / cnt); //上一天的平均气温
-            date_tp[date] = date_tp_max[date] = date_tp_min[date] = tp;
-            cnt = 1;
-        }
-        lastDate = date;
+        tpElem->QueryAttribute("day", &tp);
+        date_tp[date] = int(tp + .5);
+        tpElem->QueryAttribute("min", &tp);
+        date_tp_min[date] = int(tp + .5);
+        tpElem->QueryAttribute("max", &tp);
+        date_tp_max[date] = int(tp + .5);
         if (node_time == node_forcast->LastChildElement())
             break;
-        else
-            node_time = node_time->NextSiblingElement();
+        node_time = node_time->NextSiblingElement();
     }
-    date_tp[lastDate] = (int)(date_tp[lastDate] / cnt); //上一天的平均气温
 
-    m_show = "日期\t\t平均温度℃\t最低气温\t最高气温";
+    m_show = "日期\t\t平均温度℃　　最低气温\t最高气温";
     for (auto &elem : date_tp) {
         auto date = elem.first;
-        m_show.Format("%s\r\n%s\t%d\t\t%d\t%d", m_show, date.c_str(), (int)elem.second, (int)date_tp_min[date], (int)date_tp_max[date]);
+        m_show.Format("%s\r\n%s\t%d\t　　　　%d\t 　%d", m_show, date.c_str(), elem.second, date_tp_min[date], date_tp_max[date]);
     }
     UpdateData(FALSE);
+}
+
+void CShowWeatherDlg::loadCityIdFromFile(const string& file)
+{
+    ifstream fin(file.c_str()); //中文城市名~id
+    if (fin.is_open()) {
+        string provice, city;
+        int id;
+        while (fin >> city >> id) {
+            if (city[0] == '=') {
+                city = city.substr(1);
+                provice = city;
+            }
+            else
+                city_cn_id_Map[provice][city] = id;
+        }
+        fin.close();
+    }
+}
+
+inline int CShowWeatherDlg::getCityId(const string& _provice, const string& _city_ch)
+{
+    if (city_cn_id_Map.find(_provice) != city_cn_id_Map.end() &&
+        city_cn_id_Map[_provice].find(_city_ch) != city_cn_id_Map[_provice].end())
+        return city_cn_id_Map[_provice][_city_ch];
+    return 0;
+}
+
+
+void CShowWeatherDlg::OnCbnSelChangeComboProvice()
+{
+    CString provice;
+    m_cmb_provice.GetLBText(m_cmb_provice.GetCurSel(), provice);
+    auto it = city_cn_id_Map.find(provice.GetBuffer());
+    m_cmb_city.ResetContent();
+    for (auto& city : it->second)
+        m_cmb_city.AddString(city.first.c_str());
+    m_cmb_city.SetCurSel(0);
 }

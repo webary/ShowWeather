@@ -3,7 +3,11 @@
 //
 
 #pragma once
-
+#include <string>
+#include <map>
+#include "afxwin.h"
+using std::string;
+using std::map;
 
 // CShowWeatherDlg 对话框
 class CShowWeatherDlg : public CDialogEx
@@ -36,7 +40,15 @@ public:
     afx_msg void OnBnClickedOk();
     afx_msg void OnTimer(UINT_PTR nIDEvent);
 
-    void prase();
+    void prase(int city_id);
+    void loadCityIdFromFile(const string & file);
+    inline int getCityId(const string & _provice, const string & _city_ch);
+    inline void joinURL(int city_id);
+
+    map<string, map<string, int> > city_cn_id_Map;
+    CString m_url;
     CString m_show;
-    CComboBox m_cmb;
+    CComboBox m_cmb_city;
+    CComboBox m_cmb_provice;    // 省份
+    afx_msg void OnCbnSelChangeComboProvice();
 };
