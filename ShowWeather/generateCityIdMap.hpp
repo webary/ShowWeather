@@ -26,7 +26,7 @@ using std::cout;
 typedef map<string, map<string, int> > City_Id_Type;
 
 //将一个string对象内容全部变为小写
-string tolower(const string& _str)
+inline string tolower(const string& _str)
 {
     string low = _str;
     for (auto& elem : low)
@@ -39,7 +39,7 @@ string tolower(const string& _str)
 并返回该表. 在读取[英文城市名~id]文件时需要调用rapidjson开源库解析该json文件.
 本函数需读取文件"city.list.json"和"city_cn.txt",并生成"city_cn_id.txt"
 **/
-City_Id_Type generateCityIdMap()
+inline City_Id_Type generateCityIdMap()
 {
     rapidjson::Document doc;
     map<string, int> city_en_id; //<城市名(英文|拼音),id>映射表
@@ -86,7 +86,7 @@ City_Id_Type generateCityIdMap()
 }
 
 //从文件中加载城市中文名和id的映射表,并返回该表
-City_Id_Type loadCityIdFromFile(const string& file)
+inline City_Id_Type loadCityIdFromFile(const string& file)
 {
     City_Id_Type city_cn_id;
     ifstream fin(file.c_str()); //中文城市名~id
@@ -115,7 +115,7 @@ inline int getCityId(City_Id_Type& _map, const string& _provice, const string& _
 }
 
 //对上面几个函数的简单测试
-void test()
+inline void test()
 {
     City_Id_Type city_cn_id1 = generateCityIdMap();
     City_Id_Type city_cn_id2 = loadCityIdFromFile("city_cn_id.txt");
