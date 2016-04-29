@@ -12,11 +12,11 @@
 #endif
 
 #include <afxinet.h>
-#include "tinyxml2.h"
 #include <iostream>
 #include <fstream>
 #include <cstring>
 
+#include "tinyxml2/tinyxml2.h"
 #include "rapidjson/document.h"
 
 using namespace std;
