@@ -11,9 +11,7 @@
 #define new DEBUG_NEW
 #endif
 
-#include <atlbase.h>
 #include <afxinet.h>
-#include <wininet.h>
 #include "tinyxml2.h"
 #include <iostream>
 #include <fstream>
@@ -30,39 +28,17 @@ using namespace std;
 class CAboutDlg : public CDialogEx
 {
 public:
-    CAboutDlg();
-
-    // 对话框数据
+    CAboutDlg() : CDialogEx(IDD_ABOUTBOX)
+    {
+    }
 #ifdef AFX_DESIGN_TIME
     enum {
         IDD = IDD_ABOUTBOX
     };
 #endif
-
-protected:
-    virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持
-
-// 实现
-protected:
-    DECLARE_MESSAGE_MAP()
 };
 
-CAboutDlg::CAboutDlg() : CDialogEx(IDD_ABOUTBOX)
-{
-}
-
-void CAboutDlg::DoDataExchange(CDataExchange* pDX)
-{
-    CDialogEx::DoDataExchange(pDX);
-}
-
-BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
-END_MESSAGE_MAP()
-
-
 // CShowWeatherDlg 对话框
-
-
 
 CShowWeatherDlg::CShowWeatherDlg(CWnd* pParent /*=NULL*/)
     : CDialogEx(IDD_SHOWWEATHER_DIALOG, pParent)
@@ -83,8 +59,8 @@ BEGIN_MESSAGE_MAP(CShowWeatherDlg, CDialogEx)
     ON_WM_SYSCOMMAND()
     ON_WM_PAINT()
     ON_WM_QUERYDRAGICON()
-    ON_BN_CLICKED(IDOK, &CShowWeatherDlg::OnBnClickedOk)
     ON_WM_TIMER()
+    ON_BN_CLICKED(IDOK, &CShowWeatherDlg::OnBnClickedOk)
     ON_CBN_SELCHANGE(IDC_COMBO_PROVICE, &CShowWeatherDlg::OnCbnSelChangeComboProvice)
 END_MESSAGE_MAP()
 
@@ -118,10 +94,6 @@ BOOL CShowWeatherDlg::OnInitDialog()
     SetIcon(m_hIcon, TRUE);			// 设置大图标
     SetIcon(m_hIcon, FALSE);		// 设置小图标
 
-    // TODO: 在此添加额外的初始化代码
-    //m_cmb_city.AddString("上海市");
-    //m_cmb_city.SetCurSel(0);
-    //SetTimer(0, 1, NULL);
     SetTimer(1, 1, NULL);
     return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -199,7 +171,7 @@ void CShowWeatherDlg::OnTimer(UINT_PTR nIDEvent)
             m_cmb_provice.SetCurSel(11);
             CString provice;
             m_cmb_provice.GetLBText(m_cmb_provice.GetCurSel(), provice);
-            auto it = city_cn_id_Map.find(provice.GetBuffer());
+            auto& it = city_cn_id_Map.find(provice.GetBuffer());
             for (auto& city : it->second)
                 m_cmb_city.AddString(city.first.c_str());
             m_cmb_city.SetCurSel(6);
@@ -224,29 +196,15 @@ inline void CShowWeatherDlg::joinURL(int city_id)
 void CShowWeatherDlg::prase(int city_id)
 {
     joinURL(city_id);
-    CInternetSession session;
-    CString strServer, strObject;
-    INTERNET_PORT wPort;
-    DWORD dwType;
-    if (!AfxParseURL(m_url, dwType, strServer, strObject, wPort))
-        return;//URL解析错误
-    CHttpConnection* pHttpConnection = session.GetHttpConnection(strServer, wPort);
-    CHttpFile *pHttpFile = pHttpConnection->OpenRequest(CHttpConnection::HTTP_VERB_GET, strObject);
-    pHttpFile->SendRequest();
-    DWORD dwRet;
-    pHttpFile->QueryInfoStatusCode(dwRet);
-    CString str = "";
-    if (dwRet == HTTP_STATUS_OK) {
-        CString tmp;
-        while (pHttpFile->ReadString(tmp) > 0)
-            str += tmp;
-    }
+    CInternetSession session1;
+    CStdioFile *pFile = session1.OpenURL(m_url); //访问指定的网址
+    CString strHtml = "", strTemp;
+    while (pFile->ReadString(strTemp)) //获取返回的结果代码
+        strHtml += strTemp;
 
-    map<string, int> date_tp;
-    map<string, int> date_tp_max;
-    map<string, int> date_tp_min;
+    map<string, int> date_tp, date_tp_max, date_tp_min;
     tinyxml2::XMLDocument doc;
-    doc.Parse(str.GetBuffer());
+    doc.Parse(strHtml.GetBuffer()); //解析该xml格式内容
     tinyxml2::XMLElement* node_forcast = doc.FirstChildElement()->FirstChildElement("forecast");
     tinyxml2::XMLElement* node_time = node_forcast->FirstChildElement();
     while (1) {
@@ -254,7 +212,7 @@ void CShowWeatherDlg::prase(int city_id)
         tinyxml2::XMLElement* tpElem = node_time->FirstChildElement("temperature");
         double tp;
         tpElem->QueryAttribute("day", &tp);
-        date_tp[date] = int(tp + .5);
+        date_tp[date] = int(tp + .5); //四舍五入得到一个整型的温度
         tpElem->QueryAttribute("min", &tp);
         date_tp_min[date] = int(tp + .5);
         tpElem->QueryAttribute("max", &tp);
@@ -265,8 +223,8 @@ void CShowWeatherDlg::prase(int city_id)
     }
 
     m_show = "日期\t\t平均温度℃　　最低气温\t最高气温";
-    for (auto &elem : date_tp) {
-        auto date = elem.first;
+    for (auto& elem : date_tp) {
+        auto& date = elem.first;
         m_show.Format("%s\r\n%s\t%d\t　　　　%d\t 　%d", m_show, date.c_str(), elem.second, date_tp_min[date], date_tp_max[date]);
     }
     UpdateData(FALSE);
@@ -303,7 +261,7 @@ void CShowWeatherDlg::OnCbnSelChangeComboProvice()
 {
     CString provice;
     m_cmb_provice.GetLBText(m_cmb_provice.GetCurSel(), provice);
-    auto it = city_cn_id_Map.find(provice.GetBuffer());
+    auto& it = city_cn_id_Map.find(provice.GetBuffer());
     m_cmb_city.ResetContent();
     for (auto& city : it->second)
         m_cmb_city.AddString(city.first.c_str());

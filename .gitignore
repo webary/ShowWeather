@@ -4,6 +4,7 @@
 *.suo
 *.user
 *.aps
+*.bat
 
 Debug
 Release
