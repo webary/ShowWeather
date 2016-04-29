@@ -125,6 +125,7 @@
     <Text Include="city_cn_id.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="generateCityIdMap.hpp" />
     <ClInclude Include="rapidjson\allocators.h" />
     <ClInclude Include="rapidjson\document.h" />
     <ClInclude Include="rapidjson\encodedstream.h" />

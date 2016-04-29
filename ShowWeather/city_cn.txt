@@ -231,7 +231,7 @@
 =宁夏  NingXia
 固原  GuYuan
 吴忠  WuZhong
-银川  YingChuan
+银川  YinChuan
 
 =青海  QingHai
 西宁  XiNing
